@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+#Gitignore for Vite
+node_modules
+.env
+dist
