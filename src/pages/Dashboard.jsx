@@ -60,8 +60,9 @@ export default function Dashboard() {
             { label: 'Dashboard', icon: '🏠', path: '/dashboard' },
             { label: 'Write', icon: '✏️', path: '/write' },
             { label: 'My Articles', icon: '📄', path: '/my-articles' },
-            { label: 'Profile', icon: '👤', path: '/profile' },
+            { label: 'Edit Profile', icon: '👤', path: '/edit-profile' },
             { label: 'Settings', icon: '⚙️', path: '/settings' },
+            { label: 'Admin Panel', icon: '🔒', path: '/admin' },
           ].map(item => (
             <Link key={item.label} to={item.path}
               className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-700 transition">
@@ -75,7 +76,9 @@ export default function Dashboard() {
               {initials}
             </div>
             <div>
-              <p className="text-sm font-medium text-gray-800">{profile?.full_name || 'Writer'}</p>
+              <Link to={`/profile/${profile?.username}`} className="text-sm font-medium text-gray-800 hover:text-purple-700">
+                {profile?.full_name || 'Writer'}
+              </Link>
               <p className="text-xs text-gray-400">@{profile?.username || 'user'}</p>
             </div>
           </div>

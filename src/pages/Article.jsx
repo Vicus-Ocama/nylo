@@ -12,6 +12,10 @@ export default function Article() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [notFound, setNotFound] = useState(false)
+  const [liked, setLiked] = useState(false)
+  const [likeCount, setLikeCount] = useState(0)
+  const [liking, setLiking] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     const load = async () => {
@@ -41,6 +45,16 @@ export default function Article() {
         .single()
       setAuthor(author)
 
+      const { data: likes } = await supabase
+        .from('likes')
+        .select('*')
+        .eq('article_id', id)
+      setLikeCount(likes?.length || 0)
+
+      if (user) {
+        setLiked(likes?.some(l => l.user_id === user.id))
+      }
+
       await loadComments()
       setLoading(false)
     }
@@ -56,6 +70,22 @@ export default function Article() {
     setComments(data || [])
   }
 
+  const toggleLike = async () => {
+    if (!currentUser) return alert('Please sign in to like articles.')
+    if (liking) return
+    setLiking(true)
+    if (liked) {
+      await supabase.from('likes').delete().eq('article_id', id).eq('user_id', currentUser.id)
+      setLiked(false)
+      setLikeCount(prev => prev - 1)
+    } else {
+      await supabase.from('likes').insert({ article_id: id, user_id: currentUser.id })
+      setLiked(true)
+      setLikeCount(prev => prev + 1)
+    }
+    setLiking(false)
+  }
+
   const submitComment = async () => {
     if (!newComment.trim()) return
     if (!currentUser) return alert('Please sign in to comment.')
@@ -69,6 +99,30 @@ export default function Article() {
     if (error) return alert('Error posting comment: ' + error.message)
     setNewComment('')
     await loadComments()
+  }
+
+  // Share functions
+  const articleUrl = window.location.href
+  const shareText = `"${article?.title}" on NyLo`
+
+  const copyLink = async () => {
+    await navigator.clipboard.writeText(articleUrl)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2500)
+  }
+
+  const shareWhatsApp = () => {
+    window.open(`https://wa.me/?text=${encodeURIComponent(shareText + '\n' + articleUrl)}`, '_blank')
+  }
+
+  const shareTwitter = () => {
+    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(articleUrl)}`, '_blank')
+  }
+
+  const shareNative = async () => {
+    if (navigator.share) {
+      await navigator.share({ title: article?.title, text: shareText, url: articleUrl })
+    }
   }
 
   const wordCount = article?.content?.trim().split(/\s+/).length || 0
@@ -116,12 +170,15 @@ export default function Article() {
         <h1 className="text-4xl font-bold text-gray-900 leading-tight mt-4 mb-6">
           {article.title}
         </h1>
+
         <div className="flex items-center gap-3 mb-10 pb-8 border-b border-gray-100">
           <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center text-purple-700 font-bold text-sm">
             {author?.full_name?.split(' ').map(n => n[0]).join('').toUpperCase() || 'U'}
           </div>
           <div>
-            <p className="text-sm font-medium text-gray-900">{author?.full_name || 'Anonymous'}</p>
+            <Link to={`/profile/${author?.username}`} className="text-sm font-medium text-gray-900 hover:text-purple-700">
+              {author?.full_name || 'Anonymous'}
+            </Link>
             <p className="text-xs text-gray-400">
               {new Date(article.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
               {' · '}{readTime} min read
@@ -134,13 +191,74 @@ export default function Article() {
           {article.content}
         </div>
 
+        {/* Like + Share Bar */}
+        <div className="mt-12 flex items-center justify-between flex-wrap gap-4 py-5 border-t border-b border-gray-100">
+
+          {/* Like Button */}
+          <button
+            onClick={toggleLike}
+            disabled={liking}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium border transition ${
+              liked
+                ? 'bg-red-50 border-red-200 text-red-500 hover:bg-red-100'
+                : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'
+            }`}
+          >
+            <span className="text-base">{liked ? '❤️' : '🤍'}</span>
+            <span>{likeCount} {likeCount === 1 ? 'like' : 'likes'}</span>
+          </button>
+
+          {/* Share Buttons */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-400 mr-1">Share:</span>
+
+            {/* WhatsApp */}
+            <button
+              onClick={shareWhatsApp}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 transition"
+            >
+              <span>💬</span> WhatsApp
+            </button>
+
+            {/* Twitter/X */}
+            <button
+              onClick={shareTwitter}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium bg-gray-50 text-gray-700 border border-gray-200 hover:bg-gray-100 transition"
+            >
+              <span>𝕏</span> Twitter
+            </button>
+
+            {/* Copy Link */}
+            <button
+              onClick={copyLink}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium border transition ${
+                copied
+                  ? 'bg-purple-50 text-purple-700 border-purple-200'
+                  : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+              }`}
+            >
+              <span>{copied ? '✅' : '🔗'}</span>
+              {copied ? 'Copied!' : 'Copy link'}
+            </button>
+
+            {/* Native Share (mobile) */}
+            {typeof navigator !== 'undefined' && navigator.share && (
+              <button
+                onClick={shareNative}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 transition"
+              >
+                <span>↗️</span> More
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* Comments Section */}
-        <div className="mt-16 pt-8 border-t border-gray-100">
+        <div className="mt-12 pt-8 border-t border-gray-100">
           <h2 className="text-lg font-bold text-gray-900 mb-6">
             Comments ({comments.length})
           </h2>
 
-          {/* Comment Input */}
           {currentUser ? (
             <div className="mb-8">
               <textarea
@@ -164,7 +282,6 @@ export default function Article() {
             </div>
           )}
 
-          {/* Comments List */}
           {comments.length === 0 ? (
             <p className="text-gray-400 text-sm">No comments yet. Be the first!</p>
           ) : (
