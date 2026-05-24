@@ -82,6 +82,15 @@ export default function Article() {
       await supabase.from('likes').insert({ article_id: id, user_id: currentUser.id })
       setLiked(true)
       setLikeCount(prev => prev + 1)
+
+      if (article.author_id !== currentUser.id) {
+        await supabase.from('notifications').insert({
+          user_id: article.author_id,
+          actor_id: currentUser.id,
+          type: 'like',
+          article_id: id
+        })
+      }
     }
     setLiking(false)
   }
@@ -95,13 +104,22 @@ export default function Article() {
       article_id: id,
       author_id: currentUser.id
     })
+    if (!error) {
+      if (article.author_id !== currentUser.id) {
+        await supabase.from('notifications').insert({
+          user_id: article.author_id,
+          actor_id: currentUser.id,
+          type: 'comment',
+          article_id: id
+        })
+      }
+    }
     setSubmitting(false)
     if (error) return alert('Error posting comment: ' + error.message)
     setNewComment('')
     await loadComments()
   }
 
-  // Share functions
   const articleUrl = window.location.href
   const shareText = `"${article?.title}" on NyLo`
 
@@ -130,7 +148,7 @@ export default function Article() {
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
-      <p className="text-gray-400 text-sm">Loading article...</p>
+      <div className="w-6 h-6 border-2 border-purple-700 border-t-transparent rounded-full animate-spin" />
     </div>
   )
 
@@ -143,15 +161,20 @@ export default function Article() {
 
   return (
     <div className="min-h-screen bg-white">
+
       {/* Navbar */}
       <nav className="border-b border-gray-200 px-6 py-4 flex items-center justify-between sticky top-0 bg-white z-50">
         <Link to="/" className="text-2xl font-bold text-purple-700">NyLo</Link>
         <div className="flex items-center gap-4">
           {currentUser ? (
-            <Link to="/dashboard" className="text-sm text-gray-600 hover:text-purple-700">Dashboard</Link>
+            <Link to="/dashboard" className="text-sm text-gray-600 hover:text-purple-700">
+              Dashboard
+            </Link>
           ) : (
             <>
-              <Link to="/login" className="text-sm text-gray-600 hover:text-purple-700">Sign in</Link>
+              <Link to="/login" className="text-sm text-gray-600 hover:text-purple-700">
+                Sign in
+              </Link>
               <Link to="/register" className="bg-purple-700 text-white px-4 py-2 rounded-full text-sm hover:bg-purple-800 transition">
                 Get started
               </Link>
@@ -160,33 +183,53 @@ export default function Article() {
         </div>
       </nav>
 
+      {/* Cover Image — full width, above article content */}
+      {article.cover_image && (
+        <div className="w-full max-h-[480px] overflow-hidden">
+          <img
+            src={article.cover_image}
+            alt={article.title}
+            className="w-full max-h-[480px] object-cover"
+          />
+        </div>
+      )}
+
       {/* Article */}
       <article className="max-w-2xl mx-auto px-6 py-14">
+
         {article.category && (
           <span className="text-xs font-medium text-purple-700 bg-purple-50 px-3 py-1 rounded-full">
             {article.category}
           </span>
         )}
+
         <h1 className="text-4xl font-bold text-gray-900 leading-tight mt-4 mb-6">
           {article.title}
         </h1>
 
+        {/* Author row */}
         <div className="flex items-center gap-3 mb-10 pb-8 border-b border-gray-100">
-          <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center text-purple-700 font-bold text-sm">
+          <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center text-purple-700 font-bold text-sm flex-shrink-0">
             {author?.full_name?.split(' ').map(n => n[0]).join('').toUpperCase() || 'U'}
           </div>
           <div>
-            <Link to={`/profile/${author?.username}`} className="text-sm font-medium text-gray-900 hover:text-purple-700">
+            <Link
+              to={`/profile/${author?.username}`}
+              className="text-sm font-medium text-gray-900 hover:text-purple-700"
+            >
               {author?.full_name || 'Anonymous'}
             </Link>
             <p className="text-xs text-gray-400">
-              {new Date(article.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+              {new Date(article.created_at).toLocaleDateString('en-US', {
+                year: 'numeric', month: 'long', day: 'numeric'
+              })}
               {' · '}{readTime} min read
               {' · '}{article.views} views
             </p>
           </div>
         </div>
 
+        {/* Article body */}
         <div className="text-lg text-gray-800 leading-relaxed whitespace-pre-wrap">
           {article.content}
         </div>
@@ -209,26 +252,20 @@ export default function Article() {
           </button>
 
           {/* Share Buttons */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs text-gray-400 mr-1">Share:</span>
-
-            {/* WhatsApp */}
             <button
               onClick={shareWhatsApp}
               className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 transition"
             >
               <span>💬</span> WhatsApp
             </button>
-
-            {/* Twitter/X */}
             <button
               onClick={shareTwitter}
               className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium bg-gray-50 text-gray-700 border border-gray-200 hover:bg-gray-100 transition"
             >
               <span>𝕏</span> Twitter
             </button>
-
-            {/* Copy Link */}
             <button
               onClick={copyLink}
               className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium border transition ${
@@ -240,8 +277,6 @@ export default function Article() {
               <span>{copied ? '✅' : '🔗'}</span>
               {copied ? 'Copied!' : 'Copy link'}
             </button>
-
-            {/* Native Share (mobile) */}
             {typeof navigator !== 'undefined' && navigator.share && (
               <button
                 onClick={shareNative}
@@ -278,7 +313,9 @@ export default function Article() {
             </div>
           ) : (
             <div className="mb-8 bg-gray-50 rounded-xl px-5 py-4 text-sm text-gray-500">
-              <Link to="/login" className="text-purple-700 font-medium hover:underline">Sign in</Link> to leave a comment.
+              <Link to="/login" className="text-purple-700 font-medium hover:underline">
+                Sign in
+              </Link> to leave a comment.
             </div>
           )}
 
@@ -300,7 +337,9 @@ export default function Article() {
                         {new Date(comment.created_at).toLocaleDateString()}
                       </span>
                     </div>
-                    <p className="text-sm text-gray-700 leading-relaxed">{comment.content}</p>
+                    <p className="text-sm text-gray-700 leading-relaxed">
+                      {comment.content}
+                    </p>
                   </div>
                 </div>
               ))}
@@ -308,9 +347,15 @@ export default function Article() {
           )}
         </div>
 
+        {/* Footer */}
         <div className="mt-12 pt-8 border-t border-gray-100 flex items-center justify-between">
-          <Link to="/" className="text-sm text-purple-700 hover:underline">← More articles</Link>
-          <Link to="/register" className="text-sm bg-purple-700 text-white px-4 py-2 rounded-full hover:bg-purple-800 transition">
+          <Link to="/" className="text-sm text-purple-700 hover:underline">
+            ← More articles
+          </Link>
+          <Link
+            to="/register"
+            className="text-sm bg-purple-700 text-white px-4 py-2 rounded-full hover:bg-purple-800 transition"
+          >
             Start writing on NyLo
           </Link>
         </div>

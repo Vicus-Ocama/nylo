@@ -90,18 +90,32 @@ export default function Home() {
               <Link
                 key={article.id}
                 to={`/article/${article.id}`}
-                className="border border-gray-200 rounded-2xl p-5 hover:shadow-md transition cursor-pointer block"
+                className="border border-gray-200 rounded-2xl overflow-hidden hover:shadow-md transition cursor-pointer block"
               >
-                <span className="text-xs font-medium text-purple-700 bg-purple-50 px-3 py-1 rounded-full">
-                  {article.category || 'General'}
-                </span>
-                <h3 className="text-base font-semibold text-gray-900 mt-3 mb-2 line-clamp-2">
-                  {article.title}
-                </h3>
-                <p className="text-sm text-gray-500 mb-3 line-clamp-2">{article.content}</p>
-                <div className="flex items-center justify-between text-xs text-gray-400">
-                  <span>{article.profiles?.full_name || 'Anonymous'}</span>
-                  <span>{readTime(article.content)} min read · {article.views || 0} views</span>
+                {/* Cover image — only shows if article has one */}
+                {article.cover_image && (
+                  <img
+                    src={article.cover_image}
+                    alt={article.title}
+                    className="w-full h-44 object-cover"
+                  />
+                )}
+
+                {/* Card content */}
+                <div className="p-5">
+                  <span className="text-xs font-medium text-purple-700 bg-purple-50 px-3 py-1 rounded-full">
+                    {article.category || 'General'}
+                  </span>
+                  <h3 className="text-base font-semibold text-gray-900 mt-3 mb-2 line-clamp-2">
+                    {article.title}
+                  </h3>
+                  <p className="text-sm text-gray-500 mb-3 line-clamp-2">
+                    {article.content}
+                  </p>
+                  <div className="flex items-center justify-between text-xs text-gray-400">
+                    <span>{article.profiles?.full_name || 'Anonymous'}</span>
+                    <span>{readTime(article.content)} min read · {article.views || 0} views</span>
+                  </div>
                 </div>
               </Link>
             ))}
