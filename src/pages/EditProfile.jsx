@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
+import DashboardLayout from '../components/DashboardLayout'
 
 export default function EditProfile() {
   const navigate = useNavigate()
@@ -38,11 +39,11 @@ export default function EditProfile() {
   const handleSave = async () => {
     setError('')
     setSuccess('')
-    if (!form.full_name.trim() || !form.username.trim()) {
-      return setError('Name and username are required.')
-    }
-    setSaving(true)
+    if (!form.full_name.trim()) return setError('Full name is required.')
+    if (!form.username.trim()) return setError('Username is required.')
+    if (form.username.length < 3) return setError('Username must be at least 3 characters.')
 
+    setSaving(true)
     const { data: { user } } = await supabase.auth.getUser()
 
     const { error } = await supabase
@@ -56,49 +57,101 @@ export default function EditProfile() {
 
     setSaving(false)
     if (error) return setError(error.message)
-    setSuccess('Profile updated!')
+    setSuccess('Profile updated successfully!')
     setTimeout(() => navigate('/dashboard'), 1500)
   }
 
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center">
-      <p className="text-gray-400 text-sm">Loading...</p>
-    </div>
+    <DashboardLayout>
+      <div className="flex items-center justify-center h-64">
+        <div className="w-6 h-6 border-2 border-purple-700 border-t-transparent rounded-full animate-spin" />
+      </div>
+    </DashboardLayout>
   )
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-      <div className="bg-white w-full max-w-md rounded-2xl border border-gray-200 p-8">
-        <Link to="/dashboard" className="text-2xl font-bold text-purple-700 block mb-8">NyLo</Link>
+    <DashboardLayout>
+      <div className="max-w-lg">
         <h1 className="text-2xl font-bold text-gray-900 mb-1">Edit profile</h1>
-        <p className="text-gray-500 text-sm mb-8">Update your public writer profile</p>
+        <p className="text-gray-500 text-sm mb-8">
+          Update your public writer profile
+        </p>
 
-        {error && <p className="text-red-500 text-sm bg-red-50 px-4 py-3 rounded-xl mb-4">{error}</p>}
-        {success && <p className="text-green-600 text-sm bg-green-50 px-4 py-3 rounded-xl mb-4">{success}</p>}
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-xl mb-6">
+            {error}
+          </div>
+        )}
+        {success && (
+          <div className="bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-xl mb-6">
+            {success}
+          </div>
+        )}
 
-        <div className="flex flex-col gap-4">
+        <div className="bg-white border border-gray-200 rounded-2xl p-6 flex flex-col gap-5">
           <div>
-            <label className="text-sm font-medium text-gray-700 block mb-1">Full name</label>
-            <input name="full_name" value={form.full_name} onChange={handle} type="text"
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
+            <label className="text-sm font-medium text-gray-700 block mb-1.5">
+              Full name <span className="text-red-400">*</span>
+            </label>
+            <input
+              name="full_name"
+              value={form.full_name}
+              onChange={handle}
+              type="text"
+              placeholder="Your full name"
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
+            />
           </div>
+
           <div>
-            <label className="text-sm font-medium text-gray-700 block mb-1">Username</label>
-            <input name="username" value={form.username} onChange={handle} type="text"
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
+            <label className="text-sm font-medium text-gray-700 block mb-1.5">
+              Username <span className="text-red-400">*</span>
+            </label>
+            <div className="relative">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm">@</span>
+              <input
+                name="username"
+                value={form.username}
+                onChange={handle}
+                type="text"
+                placeholder="yourhandle"
+                className="w-full border border-gray-200 rounded-xl pl-8 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
+              />
+            </div>
+            <p className="text-xs text-gray-400 mt-1">
+              Your profile will be at nylo.app/@{form.username || 'yourhandle'}
+            </p>
           </div>
+
           <div>
-            <label className="text-sm font-medium text-gray-700 block mb-1">Bio</label>
-            <textarea name="bio" value={form.bio} onChange={handle} rows={4}
+            <label className="text-sm font-medium text-gray-700 block mb-1.5">Bio</label>
+            <textarea
+              name="bio"
+              value={form.bio}
+              onChange={handle}
+              rows={4}
               placeholder="Tell readers a bit about yourself..."
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none" />
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition resize-none"
+            />
+            <p className="text-xs text-gray-400 mt-1">
+              {form.bio.length}/160 characters
+            </p>
           </div>
-          <button onClick={handleSave} disabled={saving}
-            className="bg-purple-700 text-white w-full py-3 rounded-xl text-sm font-medium hover:bg-purple-800 transition mt-2 disabled:opacity-50">
-            {saving ? 'Saving...' : 'Save changes'}
+
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="bg-purple-700 text-white w-full py-3 rounded-xl text-sm font-medium hover:bg-purple-800 transition disabled:opacity-50"
+          >
+            {saving ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Saving...
+              </span>
+            ) : 'Save changes'}
           </button>
         </div>
       </div>
-    </div>
+    </DashboardLayout>
   )
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
+import usePageTitle from '../hooks/usePageTitle'
 
 export default function Article() {
   const { id } = useParams()
@@ -16,6 +17,13 @@ export default function Article() {
   const [likeCount, setLikeCount] = useState(0)
   const [liking, setLiking] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [bookmarked, setBookmarked] = useState(false)
+  const [bookmarking, setBookmarking] = useState(false)
+  const [following, setFollowing] = useState(false)
+  const [followLoading, setFollowLoading] = useState(false)
+  const [followerCount, setFollowerCount] = useState(0)
+  
+  usePageTitle(article?.title || 'Article') 
 
   useEffect(() => {
     const load = async () => {
@@ -45,14 +53,40 @@ export default function Article() {
         .single()
       setAuthor(author)
 
+      // Likes
       const { data: likes } = await supabase
         .from('likes')
         .select('*')
         .eq('article_id', id)
       setLikeCount(likes?.length || 0)
 
+      // Followers count
+      const { data: followers } = await supabase
+        .from('follows')
+        .select('*')
+        .eq('following_id', article.author_id)
+      setFollowerCount(followers?.length || 0)
+
       if (user) {
         setLiked(likes?.some(l => l.user_id === user.id))
+
+        // Check bookmark
+        const { data: bookmark } = await supabase
+          .from('bookmarks')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('article_id', id)
+          .single()
+        setBookmarked(!!bookmark)
+
+        // Check follow
+        const { data: follow } = await supabase
+          .from('follows')
+          .select('id')
+          .eq('follower_id', user.id)
+          .eq('following_id', article.author_id)
+          .single()
+        setFollowing(!!follow)
       }
 
       await loadComments()
@@ -75,14 +109,14 @@ export default function Article() {
     if (liking) return
     setLiking(true)
     if (liked) {
-      await supabase.from('likes').delete().eq('article_id', id).eq('user_id', currentUser.id)
+      await supabase.from('likes').delete()
+        .eq('article_id', id).eq('user_id', currentUser.id)
       setLiked(false)
       setLikeCount(prev => prev - 1)
     } else {
       await supabase.from('likes').insert({ article_id: id, user_id: currentUser.id })
       setLiked(true)
       setLikeCount(prev => prev + 1)
-
       if (article.author_id !== currentUser.id) {
         await supabase.from('notifications').insert({
           user_id: article.author_id,
@@ -95,6 +129,51 @@ export default function Article() {
     setLiking(false)
   }
 
+  const toggleBookmark = async () => {
+    if (!currentUser) return alert('Please sign in to bookmark articles.')
+    if (bookmarking) return
+    setBookmarking(true)
+    if (bookmarked) {
+      await supabase.from('bookmarks').delete()
+        .eq('user_id', currentUser.id).eq('article_id', id)
+      setBookmarked(false)
+    } else {
+      await supabase.from('bookmarks').insert({
+        user_id: currentUser.id,
+        article_id: id
+      })
+      setBookmarked(true)
+    }
+    setBookmarking(false)
+  }
+
+  const toggleFollow = async () => {
+    if (!currentUser) return alert('Please sign in to follow authors.')
+    if (followLoading) return
+    if (currentUser.id === author?.id) return
+    setFollowLoading(true)
+    if (following) {
+      await supabase.from('follows').delete()
+        .eq('follower_id', currentUser.id)
+        .eq('following_id', author.id)
+      setFollowing(false)
+      setFollowerCount(prev => prev - 1)
+    } else {
+      await supabase.from('follows').insert({
+        follower_id: currentUser.id,
+        following_id: author.id
+      })
+      setFollowing(true)
+      setFollowerCount(prev => prev + 1)
+      await supabase.from('notifications').insert({
+        user_id: author.id,
+        actor_id: currentUser.id,
+        type: 'follow'
+      })
+    }
+    setFollowLoading(false)
+  }
+
   const submitComment = async () => {
     if (!newComment.trim()) return
     if (!currentUser) return alert('Please sign in to comment.')
@@ -104,15 +183,13 @@ export default function Article() {
       article_id: id,
       author_id: currentUser.id
     })
-    if (!error) {
-      if (article.author_id !== currentUser.id) {
-        await supabase.from('notifications').insert({
-          user_id: article.author_id,
-          actor_id: currentUser.id,
-          type: 'comment',
-          article_id: id
-        })
-      }
+    if (!error && article.author_id !== currentUser.id) {
+      await supabase.from('notifications').insert({
+        user_id: article.author_id,
+        actor_id: currentUser.id,
+        type: 'comment',
+        article_id: id
+      })
     }
     setSubmitting(false)
     if (error) return alert('Error posting comment: ' + error.message)
@@ -163,11 +240,28 @@ export default function Article() {
     <div className="min-h-screen bg-white">
 
       {/* Navbar */}
-      <nav className="border-b border-gray-200 px-6 py-4 flex items-center justify-between sticky top-0 bg-white z-50">
+      <nav className="border-b border-gray-200 px-4 sm:px-6 py-4 flex items-center justify-between sticky top-0 bg-white z-50">
         <Link to="/" className="text-2xl font-bold text-purple-700">NyLo</Link>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          {/* Bookmark button in navbar */}
+          {currentUser && (
+            <button
+              onClick={toggleBookmark}
+              disabled={bookmarking}
+              className={`text-sm px-3 py-1.5 rounded-full border transition ${
+                bookmarked
+                  ? 'bg-purple-50 border-purple-200 text-purple-700'
+                  : 'border-gray-200 text-gray-500 hover:border-purple-300'
+              }`}
+            >
+              {bookmarked ? '🔖 Saved' : '🔖 Save'}
+            </button>
+          )}
           {currentUser ? (
-            <Link to="/dashboard" className="text-sm text-gray-600 hover:text-purple-700">
+            <Link
+              to="/dashboard"
+              className="text-sm text-gray-600 hover:text-purple-700"
+            >
               Dashboard
             </Link>
           ) : (
@@ -175,7 +269,10 @@ export default function Article() {
               <Link to="/login" className="text-sm text-gray-600 hover:text-purple-700">
                 Sign in
               </Link>
-              <Link to="/register" className="bg-purple-700 text-white px-4 py-2 rounded-full text-sm hover:bg-purple-800 transition">
+              <Link
+                to="/register"
+                className="bg-purple-700 text-white px-4 py-2 rounded-full text-sm hover:bg-purple-800 transition"
+              >
                 Get started
               </Link>
             </>
@@ -183,7 +280,7 @@ export default function Article() {
         </div>
       </nav>
 
-      {/* Cover Image — full width, above article content */}
+      {/* Cover image */}
       {article.cover_image && (
         <div className="w-full max-h-[480px] overflow-hidden">
           <img
@@ -195,7 +292,7 @@ export default function Article() {
       )}
 
       {/* Article */}
-      <article className="max-w-2xl mx-auto px-6 py-14">
+      <article className="max-w-2xl mx-auto px-4 sm:px-6 py-10 sm:py-14">
 
         {article.category && (
           <span className="text-xs font-medium text-purple-700 bg-purple-50 px-3 py-1 rounded-full">
@@ -203,57 +300,89 @@ export default function Article() {
           </span>
         )}
 
-        <h1 className="text-4xl font-bold text-gray-900 leading-tight mt-4 mb-6">
+        <h1 className="text-3xl sm:text-5xl font-bold text-gray-900 leading-tight mt-4 mb-6 tracking-tight font-reading">
           {article.title}
         </h1>
 
         {/* Author row */}
-        <div className="flex items-center gap-3 mb-10 pb-8 border-b border-gray-100">
-          <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center text-purple-700 font-bold text-sm flex-shrink-0">
-            {author?.full_name?.split(' ').map(n => n[0]).join('').toUpperCase() || 'U'}
+        <div className="flex items-center justify-between gap-3 mb-10 pb-8 border-b border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-full bg-purple-100 flex items-center justify-center text-purple-700 font-bold text-sm flex-shrink-0">
+              {author?.full_name?.split(' ').map(n => n[0]).join('').toUpperCase() || 'U'}
+            </div>
+            <div>
+              <Link
+                to={`/profile/${author?.username}`}
+                className="text-sm font-medium text-gray-900 hover:text-purple-700"
+              >
+                {author?.full_name || 'Anonymous'}
+              </Link>
+              <p className="text-xs text-gray-400">
+                {followerCount} followers ·{' '}
+                {new Date(article.created_at).toLocaleDateString('en-US', {
+                  year: 'numeric', month: 'long', day: 'numeric'
+                })}
+                {' · '}{readTime} min read
+              </p>
+            </div>
           </div>
-          <div>
-            <Link
-              to={`/profile/${author?.username}`}
-              className="text-sm font-medium text-gray-900 hover:text-purple-700"
+
+          {/* Follow button — only show if not own article */}
+          {currentUser && currentUser.id !== article.author_id && (
+            <button
+              onClick={toggleFollow}
+              disabled={followLoading}
+              className={`flex-shrink-0 text-sm px-4 py-1.5 rounded-full border font-medium transition ${
+                following
+                  ? 'bg-purple-700 text-white border-purple-700 hover:bg-purple-800'
+                  : 'border-gray-300 text-gray-700 hover:border-purple-700 hover:text-purple-700'
+              }`}
             >
-              {author?.full_name || 'Anonymous'}
-            </Link>
-            <p className="text-xs text-gray-400">
-              {new Date(article.created_at).toLocaleDateString('en-US', {
-                year: 'numeric', month: 'long', day: 'numeric'
-              })}
-              {' · '}{readTime} min read
-              {' · '}{article.views} views
-            </p>
-          </div>
+              {followLoading ? '...' : following ? 'Following' : 'Follow'}
+            </button>
+          )}
         </div>
 
         {/* Article body */}
-        <div className="text-lg text-gray-800 leading-relaxed whitespace-pre-wrap">
+        <div className="article-body whitespace-pre-wrap">
           {article.content}
         </div>
 
-        {/* Like + Share Bar */}
-        <div className="mt-12 flex items-center justify-between flex-wrap gap-4 py-5 border-t border-b border-gray-100">
+        {/* Like + Share + Bookmark Bar */}
+        <div className="mt-12 flex items-center justify-between flex-wrap gap-3 py-5 border-t border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            {/* Like */}
+            <button
+              onClick={toggleLike}
+              disabled={liking}
+              className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium border transition ${
+                liked
+                  ? 'bg-red-50 border-red-200 text-red-500 hover:bg-red-100'
+                  : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'
+              }`}
+            >
+              <span>{liked ? '❤️' : '🤍'}</span>
+              <span>{likeCount}</span>
+            </button>
 
-          {/* Like Button */}
-          <button
-            onClick={toggleLike}
-            disabled={liking}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium border transition ${
-              liked
-                ? 'bg-red-50 border-red-200 text-red-500 hover:bg-red-100'
-                : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'
-            }`}
-          >
-            <span className="text-base">{liked ? '❤️' : '🤍'}</span>
-            <span>{likeCount} {likeCount === 1 ? 'like' : 'likes'}</span>
-          </button>
+            {/* Bookmark */}
+            <button
+              onClick={toggleBookmark}
+              disabled={bookmarking}
+              className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium border transition ${
+                bookmarked
+                  ? 'bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100'
+                  : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'
+              }`}
+            >
+              <span>🔖</span>
+              <span>{bookmarked ? 'Saved' : 'Save'}</span>
+            </button>
+          </div>
 
-          {/* Share Buttons */}
+          {/* Share */}
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs text-gray-400 mr-1">Share:</span>
+            <span className="text-xs text-gray-400">Share:</span>
             <button
               onClick={shareWhatsApp}
               className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 transition"
@@ -275,20 +404,60 @@ export default function Article() {
               }`}
             >
               <span>{copied ? '✅' : '🔗'}</span>
-              {copied ? 'Copied!' : 'Copy link'}
+              {copied ? 'Copied!' : 'Copy'}
             </button>
             {typeof navigator !== 'undefined' && navigator.share && (
               <button
                 onClick={shareNative}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 transition"
               >
-                <span>↗️</span> More
+                ↗️ More
               </button>
             )}
           </div>
         </div>
 
-        {/* Comments Section */}
+        {/* Author card */}
+        <div className="mt-10 bg-gray-50 rounded-2xl p-6 flex items-start gap-4">
+          <div className="w-14 h-14 rounded-full bg-purple-100 flex items-center justify-center text-purple-700 font-bold text-xl flex-shrink-0">
+            {author?.full_name?.split(' ').map(n => n[0]).join('').toUpperCase() || 'U'}
+          </div>
+          <div className="flex-1">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div>
+                <Link
+                  to={`/profile/${author?.username}`}
+                  className="font-semibold text-gray-900 hover:text-purple-700"
+                >
+                  {author?.full_name || 'Anonymous'}
+                </Link>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {followerCount} followers
+                </p>
+              </div>
+              {currentUser && currentUser.id !== article.author_id && (
+                <button
+                  onClick={toggleFollow}
+                  disabled={followLoading}
+                  className={`text-sm px-4 py-1.5 rounded-full border font-medium transition ${
+                    following
+                      ? 'bg-purple-700 text-white border-purple-700 hover:bg-purple-800'
+                      : 'border-gray-300 text-gray-700 hover:border-purple-700 hover:text-purple-700'
+                  }`}
+                >
+                  {followLoading ? '...' : following ? 'Following' : 'Follow'}
+                </button>
+              )}
+            </div>
+            {author?.bio && (
+              <p className="text-sm text-gray-600 mt-2 leading-relaxed">
+                {author.bio}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Comments */}
         <div className="mt-12 pt-8 border-t border-gray-100">
           <h2 className="text-lg font-bold text-gray-900 mb-6">
             Comments ({comments.length})

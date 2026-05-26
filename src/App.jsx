@@ -13,6 +13,7 @@ import Admin from './pages/Admin'
 import Notifications from './pages/Notifications'
 import InstallPrompt from './components/InstallPrompt'
 import Bookmarks from './pages/Bookmarks'
+import NotFound from './pages/NotFound'
 
 export default function App() {
   return (
@@ -47,7 +48,7 @@ export default function App() {
         <Route path="/bookmarks" element={
           <PrivateRoute><Bookmarks /></PrivateRoute>
         } />
-
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>
   )

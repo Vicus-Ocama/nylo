@@ -1,6 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
+import usePageTitle from '../hooks/usePageTitle'
+import Toast from '../components/Toast'
+import useToast from '../hooks/useToast'
 
 const CATEGORIES = [
   'Politics', 'Technology', 'Culture',
@@ -10,23 +13,29 @@ const CATEGORIES = [
 export default function Write() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const editId = searchParams.get('edit') // /write?edit=ARTICLE_ID
+  const editId = searchParams.get('edit')
 
   const [user, setUser] = useState(null)
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [category, setCategory] = useState('')
-  const [coverImage, setCoverImage] = useState(null)      // File object
-  const [coverPreview, setCoverPreview] = useState('')    // URL for preview
-  const [existingCover, setExistingCover] = useState('') // Already saved URL
+  const [coverImage, setCoverImage] = useState(null)
+  const [coverPreview, setCoverPreview] = useState('')
+  const [existingCover, setExistingCover] = useState('')
   const [saving, setSaving] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [uploadingImage, setUploadingImage] = useState(false)
   const [savedMessage, setSavedMessage] = useState('')
   const [isEdit, setIsEdit] = useState(false)
+  const [showCategoryMenu, setShowCategoryMenu] = useState(false)
+  const titleRef = useRef(null)
+  const contentRef = useRef(null)
 
   const wordCount = content.trim() === '' ? 0 : content.trim().split(/\s+/).length
   const readTime = Math.max(1, Math.ceil(wordCount / 200))
+  const { toast, showToast, hideToast } = useToast()
+
+  usePageTitle(isEdit ? 'Edit Article' : 'Write')
 
   useEffect(() => {
     const load = async () => {
@@ -34,17 +43,16 @@ export default function Write() {
       if (!user) { navigate('/login'); return }
       setUser(user)
 
-      // If editing, load the existing article
       if (editId) {
         const { data: article, error } = await supabase
           .from('articles')
           .select('*')
           .eq('id', editId)
-          .eq('author_id', user.id) // Security: only own articles
+          .eq('author_id', user.id)
           .single()
 
         if (error || !article) {
-          alert('Article not found or you do not have permission to edit it.')
+          showToast('Article not found or you do not have permission to edit it.', 'error')
           navigate('/dashboard')
           return
         }
@@ -60,23 +68,24 @@ export default function Write() {
     load()
   }, [editId])
 
-  // Handle cover image selection
+  const autoResize = (ref) => {
+    if (ref.current) {
+      ref.current.style.height = 'auto'
+      ref.current.style.height = ref.current.scrollHeight + 'px'
+    }
+  }
+
   const handleImageSelect = (e) => {
     const file = e.target.files[0]
     if (!file) return
-
-    // Validate file type
     if (!file.type.startsWith('image/')) {
-      alert('Please select an image file.')
+      showToast('Please select an image file.', 'error')
       return
     }
-
-    // Validate file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
-      alert('Image must be under 5MB.')
+      showToast('Image must be under 5MB.', 'error')
       return
     }
-
     setCoverImage(file)
     setCoverPreview(URL.createObjectURL(file))
   }
@@ -87,10 +96,8 @@ export default function Write() {
     setExistingCover('')
   }
 
-  // Upload image to Supabase Storage
   const uploadCoverImage = async () => {
     if (!coverImage) return existingCover || null
-
     setUploadingImage(true)
     const fileExt = coverImage.name.split('.').pop()
     const fileName = `${user.id}/${Date.now()}.${fileExt}`
@@ -102,7 +109,7 @@ export default function Write() {
     setUploadingImage(false)
 
     if (error) {
-      alert('Failed to upload image: ' + error.message)
+      showToast('Failed to upload image: ' + error.message, 'error')
       return null
     }
 
@@ -114,13 +121,21 @@ export default function Write() {
   }
 
   const saveArticle = async (published = false) => {
-    if (!title.trim()) return alert('Please add a title first.')
-    if (!content.trim()) return alert('Please write some content first.')
-    if (published && !category) return alert('Please select a category before publishing.')
+    if (!title.trim()) {
+      showToast('Please add a title first.', 'error')
+      return
+    }
+    if (!content.trim()) {
+      showToast('Please write some content first.', 'error')
+      return
+    }
+    if (published && !category) {
+      showToast('Please select a category before publishing.', 'error')
+      return
+    }
 
     published ? setPublishing(true) : setSaving(true)
 
-    // Upload cover image if one was selected
     const coverUrl = await uploadCoverImage()
 
     const articleData = {
@@ -134,7 +149,6 @@ export default function Write() {
     let error
 
     if (isEdit) {
-      // UPDATE existing article
       const { error: updateError } = await supabase
         .from('articles')
         .update(articleData)
@@ -142,7 +156,6 @@ export default function Write() {
         .eq('author_id', user.id)
       error = updateError
     } else {
-      // INSERT new article
       const { error: insertError } = await supabase
         .from('articles')
         .insert({ ...articleData, author_id: user.id })
@@ -151,67 +164,95 @@ export default function Write() {
 
     published ? setPublishing(false) : setSaving(false)
 
-    if (error) return alert('Error saving article: ' + error.message)
+    if (error) {
+      showToast('Error saving article: ' + error.message, 'error')
+      return
+    }
 
     if (published) {
       navigate('/dashboard')
     } else {
       setSavedMessage(isEdit ? 'Changes saved!' : 'Draft saved!')
+      showToast(isEdit ? 'Changes saved!' : 'Draft saved!', 'success')
       setTimeout(() => setSavedMessage(''), 3000)
     }
   }
 
   return (
     <div className="min-h-screen bg-white">
+
       {/* Header */}
-      <header className="border-b border-gray-200 px-6 py-4 flex items-center justify-between sticky top-0 bg-white z-50">
-        <Link to="/dashboard" className="text-2xl font-bold text-purple-700">NyLo</Link>
-        <div className="flex items-center gap-3 text-sm">
-          <span className="text-gray-400 hidden sm:block">
+      <header className="border-b border-gray-100 px-4 sm:px-6 py-4 flex items-center justify-between sticky top-0 bg-white z-50">
+        <Link to="/dashboard" className="text-xl font-bold text-purple-700">NyLo</Link>
+
+        <div className="flex items-center gap-2 sm:gap-3">
+          <span className="text-xs text-gray-400 hidden sm:block">
             {wordCount} words · {readTime} min read
           </span>
+
           {savedMessage && (
-            <span className="text-green-600 font-medium">{savedMessage}</span>
+            <span className="text-green-600 text-xs font-medium">{savedMessage}</span>
           )}
+
           <button
             onClick={() => saveArticle(false)}
             disabled={saving || uploadingImage}
-            className="border border-gray-200 text-gray-700 px-4 py-2 rounded-full hover:border-purple-700 hover:text-purple-700 transition disabled:opacity-50"
+            className="border border-gray-200 text-gray-600 px-3 sm:px-4 py-2 rounded-full text-sm hover:border-purple-700 hover:text-purple-700 transition disabled:opacity-50"
           >
-            {saving ? 'Saving...' : isEdit ? 'Save changes' : 'Save draft'}
+            {saving ? 'Saving...' : 'Save draft'}
           </button>
+
           <button
             onClick={() => saveArticle(true)}
             disabled={publishing || uploadingImage}
-            className="bg-purple-700 text-white px-4 py-2 rounded-full hover:bg-purple-800 transition disabled:opacity-50"
+            className="bg-purple-700 text-white px-3 sm:px-4 py-2 rounded-full text-sm font-medium hover:bg-purple-800 transition disabled:opacity-50"
           >
             {publishing ? 'Publishing...' : uploadingImage ? 'Uploading...' : 'Publish'}
           </button>
         </div>
       </header>
 
-      <div className="max-w-2xl mx-auto px-6 py-12">
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-10">
 
-        {/* Edit mode banner */}
+        {/* Edit banner */}
         {isEdit && (
           <div className="mb-6 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-sm text-blue-700 flex items-center gap-2">
-            ✏️ <span>You are editing an existing article. Changes will update the published version.</span>
+            ✏️ <span>Editing an existing article. Changes update the published version.</span>
           </div>
         )}
 
         {/* Category selector */}
-        <select
-          value={category}
-          onChange={e => setCategory(e.target.value)}
-          className="mb-6 text-sm border border-gray-200 rounded-full px-4 py-2 text-gray-600 focus:outline-none focus:ring-2 focus:ring-purple-500"
-        >
-          <option value="">Select a category</option>
-          {CATEGORIES.map(c => (
-            <option key={c} value={c}>{c}</option>
-          ))}
-        </select>
+        <div className="relative mb-6">
+          <button
+            onClick={() => setShowCategoryMenu(!showCategoryMenu)}
+            className={`flex items-center gap-2 text-sm border rounded-full px-4 py-2 transition ${
+              category
+                ? 'border-purple-300 text-purple-700 bg-purple-50'
+                : 'border-gray-200 text-gray-500 hover:border-gray-300'
+            }`}
+          >
+            {category || 'Select a category'}
+            <span className="text-xs">{showCategoryMenu ? '▲' : '▼'}</span>
+          </button>
 
-        {/* Cover image section */}
+          {showCategoryMenu && (
+            <div className="absolute top-10 left-0 bg-white border border-gray-200 rounded-xl shadow-lg z-10 py-1 min-w-40">
+              {CATEGORIES.map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => { setCategory(cat); setShowCategoryMenu(false) }}
+                  className={`w-full text-left px-4 py-2 text-sm transition hover:bg-purple-50 hover:text-purple-700 ${
+                    category === cat ? 'text-purple-700 font-medium' : 'text-gray-700'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Cover image */}
         <div className="mb-8">
           {coverPreview ? (
             <div className="relative rounded-2xl overflow-hidden">
@@ -228,9 +269,9 @@ export default function Write() {
               </button>
             </div>
           ) : (
-            <label className="flex flex-col items-center justify-center w-full h-36 border-2 border-dashed border-gray-200 rounded-2xl cursor-pointer hover:border-purple-400 hover:bg-purple-50 transition">
-              <span className="text-2xl mb-2">🖼️</span>
-              <span className="text-sm text-gray-500">Click to add a cover image</span>
+            <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-200 rounded-2xl cursor-pointer hover:border-purple-400 hover:bg-purple-50 transition group">
+              <span className="text-2xl mb-2 group-hover:scale-110 transition-transform">🖼️</span>
+              <span className="text-sm text-gray-500">Add a cover image</span>
               <span className="text-xs text-gray-400 mt-1">JPG, PNG or WebP · Max 5MB</span>
               <input
                 type="file"
@@ -244,24 +285,42 @@ export default function Write() {
 
         {/* Title */}
         <textarea
+          ref={titleRef}
           value={title}
-          onChange={e => setTitle(e.target.value)}
+          onChange={e => { setTitle(e.target.value); autoResize(titleRef) }}
           placeholder="Your article title..."
           rows={2}
-          className="w-full text-4xl font-bold text-gray-900 placeholder-gray-300 border-none outline-none resize-none mb-6 leading-tight"
+          className="w-full text-3xl sm:text-4xl font-bold text-gray-900 placeholder-gray-200 border-none outline-none resize-none mb-4 leading-tight font-reading"
         />
+
+        {title && !content && (
+          <p className="text-sm text-gray-300 mb-4 -mt-2">
+            Click below to start writing your story...
+          </p>
+        )}
 
         <div className="border-t border-gray-100 mb-6" />
 
         {/* Content */}
         <textarea
+          ref={contentRef}
           value={content}
-          onChange={e => setContent(e.target.value)}
+          onChange={e => { setContent(e.target.value); autoResize(contentRef) }}
           placeholder="Tell your story..."
-          rows={25}
-          className="w-full text-lg text-gray-800 placeholder-gray-300 border-none outline-none resize-none leading-relaxed"
+          rows={20}
+          className="w-full text-lg text-gray-800 placeholder-gray-200 border-none outline-none resize-none leading-relaxed article-body"
         />
+
+        {/* Bottom word count for mobile */}
+        <div className="mt-8 pt-6 border-t border-gray-100 flex items-center justify-between text-xs text-gray-400 sm:hidden">
+          <span>{wordCount} words</span>
+          <span>{readTime} min read</span>
+        </div>
       </div>
+
+      {/* Toast notification */}
+      {toast && <Toast message={toast.message} type={toast.type} onClose={hideToast} />}
+
     </div>
   )
 }

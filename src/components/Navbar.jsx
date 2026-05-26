@@ -13,49 +13,64 @@ export default function Navbar() {
     // Get current session
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       setUser(user)
+
       if (user) {
         const { data: profile } = await supabase
           .from('profiles')
           .select('username, full_name')
           .eq('id', user.id)
           .single()
+
         setProfile(profile)
       }
+
       setChecked(true)
     })
 
-    // Listen for auth changes (login/logout)
+    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         setUser(session?.user ?? null)
+
         if (session?.user) {
           const { data: profile } = await supabase
             .from('profiles')
             .select('username, full_name')
             .eq('id', session.user.id)
             .single()
+
           setProfile(profile)
         } else {
           setProfile(null)
         }
       }
     )
+
     return () => subscription.unsubscribe()
   }, [])
 
   const handleSearch = (e) => {
     e.preventDefault()
+
     if (!query.trim()) return
+
     navigate(`/search?q=${encodeURIComponent(query.trim())}`)
     setQuery('')
   }
 
-  const initials = profile?.full_name
-    ?.split(' ').map(n => n[0]).join('').toUpperCase() || 'U'
+  const initials =
+    profile?.full_name
+      ?.split(' ')
+      .map((n) => n[0])
+      .join('')
+      .toUpperCase() || 'U'
 
   return (
     <nav className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between sticky top-0 z-50">
-      <Link to="/" className="text-2xl font-bold text-purple-700 tracking-tight flex-shrink-0">
+      <Link
+        to="/"
+        className="text-2xl font-bold text-purple-700 tracking-tight flex-shrink-0"
+      >
         NyLo
       </Link>
 
@@ -64,16 +79,16 @@ export default function Navbar() {
         <input
           type="text"
           value={query}
-          onChange={e => setQuery(e.target.value)}
+          onChange={(e) => setQuery(e.target.value)}
           placeholder="Search articles..."
           className="w-full border border-gray-200 rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
         />
       </form>
 
-      {/* Right side — changes based on auth state */}
+      {/* Right side */}
       <div className="flex items-center gap-3 flex-shrink-0">
         {!checked ? (
-          // Still loading — show nothing to avoid flicker
+          // Loading
           <div className="w-8 h-8 rounded-full bg-gray-100 animate-pulse" />
         ) : user ? (
           // Logged in
@@ -84,6 +99,7 @@ export default function Navbar() {
             >
               Write
             </Link>
+
             <Link
               to="/notifications"
               className="text-sm text-gray-600 hover:text-purple-700"
@@ -91,13 +107,52 @@ export default function Navbar() {
             >
               🔔
             </Link>
-            <Link
-              to="/dashboard"
-              className="w-9 h-9 rounded-full bg-purple-100 flex items-center justify-center text-purple-700 font-bold text-sm hover:bg-purple-200 transition"
-              title={`Go to dashboard — ${profile?.full_name}`}
-            >
-              {initials}
-            </Link>
+
+            {/* Avatar dropdown */}
+            <div className="relative group">
+              <button
+                className="w-9 h-9 rounded-full bg-purple-100 flex items-center justify-center text-purple-700 font-bold text-sm hover:bg-purple-200 transition"
+                title={profile?.full_name}
+              >
+                {initials}
+              </button>
+
+              {/* Dropdown */}
+              <div className="absolute right-0 top-11 bg-white border border-gray-200 rounded-xl shadow-lg py-1 w-44 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 z-50">
+                <Link
+                  to="/dashboard"
+                  className="block px-4 py-2 text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-700"
+                >
+                  Dashboard
+                </Link>
+
+                <Link
+                  to={`/profile/${profile?.username}`}
+                  className="block px-4 py-2 text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-700"
+                >
+                  My profile
+                </Link>
+
+                <Link
+                  to="/bookmarks"
+                  className="block px-4 py-2 text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-700"
+                >
+                  Bookmarks
+                </Link>
+
+                <div className="border-t border-gray-100 my-1" />
+
+                <button
+                  onClick={async () => {
+                    await supabase.auth.signOut()
+                    window.location.href = '/'
+                  }}
+                  className="block w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-red-50"
+                >
+                  Sign out
+                </button>
+              </div>
+            </div>
           </>
         ) : (
           // Logged out
@@ -108,6 +163,7 @@ export default function Navbar() {
             >
               Sign in
             </Link>
+
             <Link
               to="/register"
               className="bg-purple-700 text-white px-4 py-2 rounded-full text-sm font-medium hover:bg-purple-800 transition"

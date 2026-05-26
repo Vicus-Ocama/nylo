@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import DashboardLayout from '../components/DashboardLayout'
+import usePageTitle from '../hooks/usePageTitle'
 
 export default function Notifications() {
   const navigate = useNavigate()
   const [notifications, setNotifications] = useState([])
   const [loading, setLoading] = useState(true)
+  usePageTitle('Notifications')
 
   useEffect(() => {
     const load = async () => {

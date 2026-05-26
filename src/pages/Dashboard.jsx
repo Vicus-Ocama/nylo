@@ -2,12 +2,15 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import DashboardLayout from '../components/DashboardLayout'
+import usePageTitle from '../hooks/usePageTitle'
 
 export default function Dashboard() {
   const navigate = useNavigate()
   const [profile, setProfile] = useState(null)
   const [articles, setArticles] = useState([])
   const [loading, setLoading] = useState(true)
+  
+  usePageTitle('Dashboard')
 
   useEffect(() => {
     const load = async () => {
@@ -71,14 +74,42 @@ export default function Dashboard() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-        {[
-          { label: 'Published', value: publishedCount },
-          { label: 'Total views', value: totalViews },
-          { label: 'All articles', value: articles.length },
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+      {[
+          {
+            label: 'Published',
+            value: publishedCount,
+            icon: '📄',
+            color: 'text-green-600',
+            bg: 'bg-green-50'
+          },
+          {
+            label: 'Total views',
+            value: totalViews,
+            icon: '👁️',
+            color: 'text-blue-600',
+            bg: 'bg-blue-50'
+          },
+          {
+            label: 'Drafts',
+            value: articles.filter(a => !a.published).length,
+            icon: '✏️',
+            color: 'text-yellow-600',
+            bg: 'bg-yellow-50'
+          },
+          {
+            label: 'All articles',
+            value: articles.length,
+            icon: '📚',
+            color: 'text-purple-600',
+            bg: 'bg-purple-50'
+          },
         ].map(stat => (
           <div key={stat.label} className="bg-white border border-gray-200 rounded-2xl p-5">
-            <p className="text-3xl font-bold text-purple-700">{stat.value}</p>
+            <div className={`w-9 h-9 rounded-xl ${stat.bg} flex items-center justify-center text-lg mb-3`}>
+              {stat.icon}
+            </div>
+            <p className={`text-3xl font-bold ${stat.color}`}>{stat.value}</p>
             <p className="text-sm text-gray-500 mt-1">{stat.label}</p>
           </div>
         ))}
